@@ -1,0 +1,5 @@
+print(5)
+print(2.5)
+print(10 + 3)
+print(8 / 2)
+print(7 + 2)

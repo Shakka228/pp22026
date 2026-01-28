@@ -1,0 +1,5 @@
+print("Hello Python")
+print(10)
+print(5 + 3)
+print("Python is easy")
+print(True)
