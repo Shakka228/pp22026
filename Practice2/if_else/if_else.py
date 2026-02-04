@@ -1,0 +1,40 @@
+a = 200
+b = 33
+if b > a:
+  print("b is greater than a")
+elif a == b:
+  print("a and b are equal")
+else:
+  print("a is greater than b")
+
+a2 = 200
+b2 = 33
+if b2 > a2:
+  print("b2 is greater than a2")
+else:
+  print("b2 is not greater than a2")
+
+number = 7
+
+if number % 2 == 0:
+  print("The number is even")
+else:
+  print("The number is odd")
+
+temperature = 22
+
+if temperature > 30:
+  print("It's hot outside!")
+elif temperature > 20:
+  print("It's warm outside")
+elif temperature > 10:
+  print("It's cool outside")
+else:
+  print("It's cold outside!")
+
+username = "Emil"
+
+if len(username) > 0:
+  print(f"Welcome, {username}!")
+else:
+  print("Error: Username cannot be empty")
