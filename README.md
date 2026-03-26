@@ -1,1 +1,1 @@
-Practice 5 is done
+Practice 6 is done
