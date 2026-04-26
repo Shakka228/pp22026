@@ -67,9 +67,6 @@ def save_canvas():
     filename = datetime.now().strftime("drawing_%Y%m%d_%H%M%S.png")
     pygame.image.save(canvas, filename)
     print("Saved:", filename)
-    if event.key == pygame.K_s and pygame.key.get_mods() & pygame.KMOD_CTRL:
-        print("CTRL+S detected")   # DEBUG
-        save_canvas()
 
 # -------- MAIN LOOP --------
 while True:
