@@ -1,54 +1,22 @@
-import pygame
-import sys
-import random
-import json
+import pygame, sys, random, json
 
+# ---------- INITIALIZATION ----------
 pygame.init()
 pygame.mixer.init()
 
 WIDTH, HEIGHT = 500, 700
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("TSIS3 Racer")
+pygame.display.set_caption("TSIS3 Racer - Power-Up Edition")
 clock = pygame.time.Clock()
+font = pygame.font.SysFont(None, 32)
 
-font = pygame.font.SysFont(None, 36)
+# ---------- HELPERS ----------
+def draw_text(text, x, y):
+    screen.blit(font.render(text, True, (255, 255, 255)), (x, y))
 
-# -------- BACKGROUND MUSIC --------
-try:
-    pygame.mixer.music.load("assets/music.mp3")
-    pygame.mixer.music.set_volume(0.5)
-    pygame.mixer.music.play(-1)
-except:
-    print("Missing background music")
-
-# -------- SAFE LOADERS --------
-def load_image(path, size):
-    try:
-        img = pygame.image.load(path)
-        return pygame.transform.scale(img, size)
-    except:
-        print("Missing image:", path)
-        return None
-
-def load_sound(path):
-    try:
-        return pygame.mixer.Sound(path)
-    except:
-        print("Missing sound:", path)
-        return None
-
-# -------- ASSETS --------
-player_img = load_image("assets/player.png", (40, 60))
-enemy_img = load_image("assets/enemy.png", (40, 60))
-
-crash_sound = load_sound("assets/crash.wav")
-nitro_sound = load_sound("assets/nitro.wav")
-pickup_sound = load_sound("assets/pickup.wav")
-
-# -------- JSON --------
 def load_json(file, default):
     try:
-        with open(file, "r") as f:
+        with open(file) as f:
             return json.load(f)
     except:
         return default
@@ -57,79 +25,92 @@ def save_json(file, data):
     with open(file, "w") as f:
         json.dump(data, f, indent=4)
 
-settings = load_json("settings.json", {"difficulty": "medium"})
+def load_image(path, size):
+    try:
+        img = pygame.image.load(path)
+        return pygame.transform.scale(img, size)
+    except:
+        print(f"Missing image: {path}")
+        return None
+
+def load_sound(path):
+    try:
+        return pygame.mixer.Sound(path)
+    except:
+        print(f"Missing sound: {path}")
+        return None
+
+# ---------- SETTINGS ----------
+def validate_settings(s):
+    if s.get("difficulty") not in ["easy", "medium", "hard"]:
+        s["difficulty"] = "medium"
+    if not isinstance(s.get("sound"), bool):
+        s["sound"] = True
+    if s.get("car_color") not in ["yellow", "blue", "red", "green"]:
+        s["car_color"] = "yellow"
+    return s
+
+settings = validate_settings(load_json("settings.json", {
+    "difficulty": "medium",
+    "sound": True,
+    "car_color": "yellow"
+}))
+save_json("settings.json", settings)
+
 leaderboard = load_json("leaderboard.json", [])
 
-# -------- PLAYER --------
-player = pygame.Rect(WIDTH//2, HEIGHT-100, 40, 60)
+# ---------- ASSETS ----------
+try:
+    pygame.mixer.music.load("assets/music.mp3")
+    pygame.mixer.music.set_volume(0.5 if settings["sound"] else 0)
+    pygame.mixer.music.play(-1)
+except:
+    print("No music file found.")
 
-vel_x = 0
-vel_y = 0
-acceleration = 0.5
-friction = 0.9
-max_speed = 6
+crash_sound = load_sound("assets/crash.wav")
+pickup_sound = load_sound("assets/pickup.wav")
 
-ROAD_LEFT = 100
-ROAD_RIGHT = 400
+enemy_img = load_image("assets/enemy.png", (40, 60))
+nitro_img = load_image("assets/nitro.png", (30, 30))
+shield_img = load_image("assets/shield.png", (30, 30))
+repair_img = load_image("assets/repair.png", (30, 30))
+coin_img = load_image("assets/coin.png", (30, 30))
+oil_img = load_image("assets/oil.png", (40, 40))
+boost_img = load_image("assets/boost.png", (40, 40))
 
-# -------- STATE --------
+# ---------- GAME OBJECTS ----------
+player = pygame.Rect(250, 600, 40, 60)
+vel_x = vel_y = 0
+ROAD_LEFT, ROAD_RIGHT = 100, 400
+
+color_map = {
+    "yellow": (255, 255, 0),
+    "blue": (0, 100, 255),
+    "red": (255, 0, 0),
+    "green": (0, 255, 0)
+}
+
+# ---------- STATE VARIABLES ----------
 state = "menu"
 username = ""
 input_text = ""
-
-obstacles = []
-powerups = []
-
 score = 0
 score_saved = False
 
-# -------- POWERUPS --------
+obstacles = []
+powerups = []
+hazards = []
+
 shield = False
 nitro_ready = False
 nitro_active = False
-nitro_start = 0
-nitro_duration = 3000
+nitro_timer = 0
+spin_timer = 0  # Timer for oil spin-out effect
 
-# -------- BUTTON --------
-class Button:
-    def __init__(self, text, x, y):
-        self.text = text
-        self.rect = pygame.Rect(x, y, 200, 50)
-
-    def draw(self):
-        mouse = pygame.mouse.get_pos()
-        color = (120,120,120) if self.rect.collidepoint(mouse) else (70,70,70)
-        pygame.draw.rect(screen, color, self.rect, border_radius=10)
-        txt = font.render(self.text, True, (255,255,255))
-        screen.blit(txt, (self.rect.x + 40, self.rect.y + 10))
-
-    def clicked(self, pos):
-        return self.rect.collidepoint(pos)
-
-play_btn = Button("Play", 150, 200)
-leader_btn = Button("Leaderboard", 150, 270)
-settings_btn = Button("Settings", 150, 340)
-
-# -------- HELPERS --------
-def draw_text(text, x, y):
-    screen.blit(font.render(text, True, (255,255,255)), (x,y))
-
-def spawn_obstacle():
-    while True:
-        x = random.randint(120, 360)
-        rect = pygame.Rect(x, -60, 40, 60)
-        if abs(rect.x - player.x) > 80:
-            return rect
-
-def spawn_powerup():
-    return {
-        "rect": pygame.Rect(random.randint(120,360), -40, 30, 30),
-        "type": random.choice(["nitro", "shield", "repair"])
-    }
-
-# -------- LOOP --------
+# ---------- MAIN LOOP ----------
 while True:
-    screen.fill((20,20,20))
+    screen.fill((30, 30, 30))
+    current_time = pygame.time.get_ticks()
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -138,18 +119,12 @@ while True:
 
         if state == "menu":
             if event.type == pygame.MOUSEBUTTONDOWN:
-                if play_btn.clicked(event.pos):
-                    state = "input"
-                    input_text = ""
-                if leader_btn.clicked(event.pos):
-                    state = "leaderboard"
-                if settings_btn.clicked(event.pos):
-                    state = "settings"
+                state = "input"
 
         elif state == "input":
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RETURN:
-                    username = input_text if input_text else "Player"
+                    username = input_text or "Player"
                     state = "game"
                 elif event.key == pygame.K_BACKSPACE:
                     input_text = input_text[:-1]
@@ -162,173 +137,163 @@ while True:
                 if event.key == pygame.K_SPACE and nitro_ready:
                     nitro_active = True
                     nitro_ready = False
-                    nitro_start = pygame.time.get_ticks()
-                    if nitro_sound:
-                        nitro_sound.play()
+                    nitro_timer = current_time
 
         elif state == "game_over":
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_r:
-                    obstacles.clear()
-                    powerups.clear()
-                    score = 0
-                    score_saved = False
+                    obstacles.clear(); powerups.clear(); hazards.clear()
+                    score = 0; score_saved = False; shield = False; nitro_ready = False
                     state = "game"
                 if event.key == pygame.K_m:
                     state = "menu"
 
-    # -------- MENU --------
+    # ---------- MENU STATE ----------
     if state == "menu":
-        draw_text("TSIS3 RACER", 150, 100)
-        play_btn.draw()
-        leader_btn.draw()
-        settings_btn.draw()
-
-    # -------- INPUT --------
-    elif state == "input":
-        draw_text("Enter Name", 160, 200)
-        box = pygame.Rect(120, 260, 260, 50)
-        pygame.draw.rect(screen, (255,255,255), box, 2)
-        txt = font.render(input_text, True, (255,255,255))
-        screen.blit(txt, (box.x + 10, box.y + 10))
-        draw_text("ENTER to start", 140, 330)
-
-    # -------- SETTINGS --------
-    elif state == "settings":
-        draw_text("Settings", 180,150)
-        draw_text(f"Difficulty: {settings['difficulty']}", 120,220)
-        draw_text("Press D to change", 120,260)
+        draw_text("TSIS3 RACER", 170, 100)
+        draw_text("Click to Play", 160, 200)
+        draw_text("L - Leaderboard", 150, 260)
+        draw_text("S - Settings", 170, 300)
 
         keys = pygame.key.get_pressed()
+        if keys[pygame.K_l]: state = "leaderboard"
+        if keys[pygame.K_s]: state = "settings"
 
+    # ---------- SETTINGS STATE ----------
+    elif state == "settings":
+        draw_text(f"Difficulty: {settings['difficulty']}", 150, 200)
+        draw_text(f"Sound: {settings['sound']}", 150, 240)
+        draw_text(f"Color: {settings['car_color']}", 150, 280)
+        draw_text("D (Diff) | S (Sound) | C (Color) | ESC", 80, 350)
+
+        keys = pygame.key.get_pressed()
         if keys[pygame.K_d]:
-            if settings["difficulty"] == "easy":
-                settings["difficulty"] = "medium"
-            elif settings["difficulty"] == "medium":
-                settings["difficulty"] = "hard"
-            else:
-                settings["difficulty"] = "easy"
-
+            settings["difficulty"] = "medium" if settings["difficulty"] == "easy" else "hard" if settings["difficulty"] == "medium" else "easy"
             save_json("settings.json", settings)
             pygame.time.delay(200)
-
+        if keys[pygame.K_s]:
+            settings["sound"] = not settings["sound"]
+            pygame.mixer.music.set_volume(0.5 if settings["sound"] else 0)
+            save_json("settings.json", settings)
+            pygame.time.delay(200)
+        if keys[pygame.K_c]:
+            colors = list(color_map.keys())
+            i = colors.index(settings["car_color"])
+            settings["car_color"] = colors[(i + 1) % len(colors)]
+            save_json("settings.json", settings)
+            pygame.time.delay(200)
         if keys[pygame.K_ESCAPE]:
             state = "menu"
 
-    # -------- GAME --------
+    # ---------- GAMEPLAY STATE ----------
     elif state == "game":
+        speed = {"easy": 4, "medium": 6, "hard": 9}[settings["difficulty"]]
 
-        difficulty = settings["difficulty"]
-        if difficulty == "easy":
-            speed, spawn_rate = 4, 0.02
-        elif difficulty == "medium":
-            speed, spawn_rate = 5, 0.03
-        else:
-            speed, spawn_rate = 7, 0.05
-
+        # Movement with Spin-out Logic
         keys = pygame.key.get_pressed()
+        if current_time - spin_timer > 600:  # Allow control if not spinning
+            if keys[pygame.K_LEFT]: vel_x -= 0.6
+            if keys[pygame.K_RIGHT]: vel_x += 0.6
+            if keys[pygame.K_UP]: vel_y -= 0.6
+            if keys[pygame.K_DOWN]: vel_y += 0.6
+        else:
+            # Player is spinning; drift randomly
+            player.x += random.randint(-2, 2)
 
-        if keys[pygame.K_LEFT]: vel_x -= acceleration
-        if keys[pygame.K_RIGHT]: vel_x += acceleration
-        if keys[pygame.K_UP]: vel_y -= acceleration
-        if keys[pygame.K_DOWN]: vel_y += acceleration
+        vel_x *= 0.9; vel_y *= 0.9
+        player.x += int(vel_x); player.y += int(vel_y)
+        player.clamp_ip(pygame.Rect(ROAD_LEFT, 0, ROAD_RIGHT - ROAD_LEFT, HEIGHT))
 
-        vel_x *= friction
-        vel_y *= friction
+        # Spawning Logic
+        if random.random() < 0.03 and len(obstacles) < 5:
+            obstacles.append(pygame.Rect(random.randint(ROAD_LEFT, ROAD_RIGHT - 40), -60, 40, 60))
+        if random.random() < 0.015:
+            hazards.append({"rect": pygame.Rect(random.randint(ROAD_LEFT, ROAD_RIGHT - 40), -40, 40, 40), "type": random.choice(["oil", "boost"])})
+        if random.random() < 0.012:
+            powerups.append({"rect": pygame.Rect(random.randint(ROAD_LEFT, ROAD_RIGHT - 30), -30, 30, 30), "type": random.choice(["nitro", "shield", "repair", "coin"])})
 
-        player.x += int(vel_x)
-        player.y += int(vel_y)
-
-        player.left = max(player.left, ROAD_LEFT)
-        player.right = min(player.right, ROAD_RIGHT)
-
-        # spawn
-        if random.random() < spawn_rate and len(obstacles) < 5:
-            obstacles.append(spawn_obstacle())
-
-        if random.random() < 0.01:
-            powerups.append(spawn_powerup())
-
-        # obstacles
-        for obs in obstacles[:]:
-            obs.y += speed
-            if obs.top > HEIGHT:
-                obstacles.remove(obs)
-                continue
-
-            if enemy_img:
-                screen.blit(enemy_img, obs.topleft)
-            else:
-                pygame.draw.rect(screen, (255,0,0), obs)
-
-            if player.colliderect(obs):
-                if crash_sound:
-                    crash_sound.play()
-
-                if shield:
-                    shield = False
-                    obstacles.remove(obs)
+        # Process Hazards (Oil/Boost)
+        for h in hazards[:]:
+            h["rect"].y += speed
+            img = oil_img if h["type"] == "oil" else boost_img
+            if img: screen.blit(img, h["rect"].topleft)
+            
+            if player.colliderect(h["rect"]):
+                if h["type"] == "oil":
+                    spin_timer = current_time
+                    vel_x = random.choice([-12, 12])
                 else:
-                    state = "game_over"
+                    vel_y -= 10 # Speed boost
+                hazards.remove(h)
+            elif h["rect"].top > HEIGHT: hazards.remove(h)
 
-        # powerups
+        # Process Powerups (Nitro/Shield/Repair/Coin)
         for p in powerups[:]:
             p["rect"].y += speed
-            pygame.draw.rect(screen, (0,255,255), p["rect"])
+            img_map = {"nitro": nitro_img, "shield": shield_img, "repair": repair_img, "coin": coin_img}
+            if img_map[p["type"]]: screen.blit(img_map[p["type"]], p["rect"].topleft)
 
             if player.colliderect(p["rect"]):
-                if pickup_sound:
-                    pickup_sound.play()
-
-                if p["type"] == "nitro":
-                    nitro_ready = True
-                elif p["type"] == "shield":
-                    shield = True
-                elif p["type"] == "repair":
-                    obstacles.clear()
-
+                if pickup_sound: pickup_sound.play()
+                if p["type"] == "nitro": nitro_ready = True
+                elif p["type"] == "shield": shield = True
+                elif p["type"] == "repair": obstacles.clear()
+                elif p["type"] == "coin": score += 500
                 powerups.remove(p)
+            elif p["rect"].top > HEIGHT: powerups.remove(p)
 
-        # nitro
+        # Process Obstacles (Enemies)
+        for o in obstacles[:]:
+            o.y += speed
+            if enemy_img: screen.blit(enemy_img, o.topleft)
+            else: pygame.draw.rect(screen, (255, 0, 0), o)
+
+            if player.colliderect(o):
+                if shield:
+                    shield = False
+                    obstacles.remove(o)
+                    if crash_sound: crash_sound.play()
+                else:
+                    if crash_sound: crash_sound.play()
+                    state = "game_over"
+            elif o.top > HEIGHT: obstacles.remove(o)
+
+        # Nitro Active Logic
         if nitro_active:
-            vel_y -= 0.3
-            if pygame.time.get_ticks() - nitro_start > nitro_duration:
-                nitro_active = False
+            vel_y -= 0.8
+            if current_time - nitro_timer > 3000: nitro_active = False
 
-        # player
-        if player_img:
-            screen.blit(player_img, player.topleft)
-        else:
-            pygame.draw.rect(screen, (255,255,0), player)
+        # Drawing Player & Shield Visual
+        pygame.draw.rect(screen, color_map[settings["car_color"]], player)
+        if shield:
+            pygame.draw.circle(screen, (0, 180, 255), player.center, 45, 3)
 
         score += 1
-        draw_text(username, 10,10)
-        draw_text(f"Score: {score}", 10,40)
-        draw_text(f"Nitro: {nitro_ready}", 10,70)
-        draw_text(f"Shield: {shield}", 10,100)
+        draw_text(f"{username} | Score: {score}", 10, 10)
+        if nitro_ready: draw_text("NITRO READY (Space)", 10, 40)
 
-    # -------- GAME OVER --------
+    # ---------- REMAINING STATES ----------
+    elif state == "input":
+        draw_text("Enter Name:", 150, 200)
+        draw_text(input_text, 150, 250)
+        draw_text("Press ENTER", 150, 300)
+
     elif state == "game_over":
         if not score_saved:
             leaderboard.append({"name": username, "score": score})
             leaderboard = sorted(leaderboard, key=lambda x: x["score"], reverse=True)[:10]
             save_json("leaderboard.json", leaderboard)
             score_saved = True
+        draw_text("GAME OVER", 170, 200)
+        draw_text(f"Final Score: {score}", 160, 240)
+        draw_text("R - Retry | M - Menu", 140, 300)
 
-        draw_text("GAME OVER", 160,200)
-        draw_text("R - Retry", 170,250)
-        draw_text("M - Menu", 170,300)
-
-    # -------- LEADERBOARD --------
     elif state == "leaderboard":
-        draw_text("Leaderboard", 170,100)
-        y = 150
+        draw_text("TOP 10 RACERS", 160, 50)
         for i, e in enumerate(leaderboard):
-            draw_text(f"{i+1}. {e['name']} - {e['score']}", 120, y)
-            y += 30
-
-        if pygame.key.get_pressed()[pygame.K_ESCAPE]:
-            state = "menu"
+            draw_text(f"{i+1}. {e['name']} - {e['score']}", 120, 100 + (i * 35))
+        draw_text("Press ESC for Menu", 140, 600)
+        if pygame.key.get_pressed()[pygame.K_ESCAPE]: state = "menu"
 
     pygame.display.flip()
     clock.tick(60)
