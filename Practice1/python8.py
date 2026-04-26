@@ -1,0 +1,5 @@
+print(int(3.9))
+print(float(5))
+print(str(10))
+print(int("7"))
+print(str(3.14))

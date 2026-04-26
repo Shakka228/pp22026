@@ -1,0 +1,5 @@
+print("Python")
+print(len("Hello"))
+print("World"[0])
+print("hello".upper())
+print("WORLD".lower())

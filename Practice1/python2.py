@@ -1,0 +1,5 @@
+print("Hello, World!")
+print("Learning Python")
+print(7)
+print(4 * 5)
+print(True)
